@@ -2,6 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
+// Use Render backend URL in production, localhost in development
+const API_URL = process.env.REACT_APP_API_URL || 
+  (process.env.NODE_ENV === 'production' 
+    ? 'https://fialerts.onrender.com'
+    : 'http://localhost:8000');
+
 function App() {
   const [apiKey, setApiKey] = useState('');
   const [tempApiKey, setTempApiKey] = useState('');
@@ -53,7 +59,7 @@ function App() {
     setMessage('');
 
     try {
-      const result = await axios.post('http://localhost:8000/analyze', {
+      const result = await axios.post(`${API_URL}/analyze`, {
         message: userMessage,
         api_key: apiKey,
         session_id: sessionId
