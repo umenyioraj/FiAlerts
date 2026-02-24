@@ -89,11 +89,11 @@ function App() {
   };
 
   const exampleQuestions = [
-    "What stocks are good for long-term growth?",
+    "Should I buy TSLA stock?",
     "Analyze AAPL stock",
-    "Compare MSFT and GOOGL",
-    "Find tech stocks with strong fundamentals",
-    "What are the best dividend stocks?"
+    "What are the key financial metrics for MSFT?",
+    "What is the EMA for AMZN?"
+
   ];
 
   const handleExampleClick = (question) => {
