@@ -655,6 +655,7 @@ Answer ONLY the user's specific question. Be concise and direct. Reference relev
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
+@app.head("/health")
 async def health_check():
     return {"status": "healthy", "mode": "simple"}
 
