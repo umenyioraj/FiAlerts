@@ -705,10 +705,22 @@
     padding: 2rem 1.5rem;
   }
   
-  .logout-button {
+  .header-actions {
     position: static;
-    margin-top: 1rem;
-    width: auto;
+    margin-top: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    width: 100%;
+  }
+  
+  .logout-button,
+  .clear-button {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    border-radius: 20px;
+    flex: 0 1 auto;
+    white-space: nowrap;
   }
   
   .container {
