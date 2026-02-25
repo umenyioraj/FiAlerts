@@ -16,6 +16,9 @@ from langgraph.graph import MessagesState, START, StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from langchain_core.tools import tool
 import yfinance as yf
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+analyzer = SentimentIntensityAnalyzer()
+
 
 app = FastAPI(title="FiAlerts API - Simple")
 
@@ -259,30 +262,56 @@ def get_news_sentiment(ticker: str) -> dict:
     """Get recent news and sentiment for a stock ticker."""
     try:
         stock = yf.Ticker(ticker.upper())
-        news = stock.news[:5] if stock.news else []
-        
-        # Simple sentiment based on news titles
+        news = stock.news[:10] if stock.news else []
+
+        if not news:
+            return {
+                "ticker": ticker.upper(),
+                "sentiment": "neutral",
+                "avg_score": 0,
+                "news_count": 0,
+                "recent_headlines": []
+            }
+
         sentiment_score = 0
-        positive_words = ['surge', 'jump', 'rally', 'gain', 'rise', 'beat', 'strong', 'growth', 'up', 'high', 'profit']
-        negative_words = ['fall', 'drop', 'decline', 'loss', 'weak', 'miss', 'concern', 'risk', 'down', 'low', 'cut']
-        
+        scored_count = 0  # ✅ initialized before loop
+
         for article in news:
-            title = article.get('title', '').lower()
-            sentiment_score += sum(1 for word in positive_words if word in title)
-            sentiment_score -= sum(1 for word in negative_words if word in title)
-        
-        sentiment = "positive" if sentiment_score > 0 else "negative" if sentiment_score < 0 else "neutral"
-        
+            content = article.get('content', {})
+            title = (
+                content.get('title', '')
+                or article.get('title', '')
+                or ''
+            )
+            summary = (
+                content.get('summary', '')
+                or article.get('summary', '')
+                or ''
+            )
+            text = f"{title}. {summary}".strip()
+            if text:
+                scores = analyzer.polarity_scores(text)
+                if abs(scores['compound']) > 0.05:
+                    sentiment_score += scores['compound']
+                    scored_count += 1
+
+        avg_score = sentiment_score / scored_count if scored_count else 0
+        sentiment = "positive" if avg_score > 0.15 else "negative" if avg_score < -0.15 else "neutral"
+
         return {
             "ticker": ticker.upper(),
             "sentiment": sentiment,
-            "sentiment_score": sentiment_score,
+            "avg_score": round(avg_score, 4),
             "news_count": len(news),
-            "recent_headlines": [n.get('title') for n in news[:3]]
+            "scored_articles": scored_count,
+            "recent_headlines": [
+                article.get('content', {}).get('title', '') or article.get('title', '')
+                for article in news[:3]
+            ]
         }
     except Exception as e:
         return {"error": f"Could not fetch sentiment for {ticker}: {str(e)}"}
-
+    
 @tool
 def get_stock_universe(category: str = "large_cap") -> dict:
     """Get a list of stocks to analyze. Categories: 'large_cap', 'tech', 'finance', 'healthcare', 'energy'."""
