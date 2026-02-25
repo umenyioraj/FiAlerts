@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -51,6 +53,62 @@ class QueryResponse(BaseModel):
     agents_used: list[str]
     session_id: str
     cached_ticker: Optional[str] = None
+
+# Copy of the function from main_simple.py
+def extract_ticker_with_ai(message: str, api_key: str) -> Optional[str]:
+    """Use AI to map the company name to the stock ticker symbol from natural language (1 API call fallback)."""
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3-flash-preview",
+            google_api_key=api_key,
+            temperature=0
+        )
+        
+        prompt = f"""Find the company name in this message and return its stock ticker symbol. 
+        
+Message: "{message}"
+
+Rules:
+- Return ONLY the ticker symbol (e.g., AAPL, TSLA, MSFT, NFLX)
+- If multiple companies mentioned, return the one the user is most likely referring to
+- Common mappings: 
+  * Apple = AAPL
+  * Microsoft = MSFT
+  * Tesla = TSLA
+  * Netflix = NFLX
+  * Google/Alphabet = GOOGL
+  * Amazon = AMZN
+  * Meta/Facebook = META
+  * Nvidia = NVDA
+  * AMD = AMD
+  * Intel = INTC
+- If no stock/company mentioned, return: NONE
+- Return ONLY the ticker symbol with no explanation
+
+Ticker:"""
+        
+        response = llm.invoke(prompt)
+        # Handle list of content blocks from Gemini
+        if isinstance(response.content, list):
+            # Extract text from the first content block
+            ticker = response.content[0].get('text', '').strip().upper()
+        else:
+            ticker = response.content.strip().upper()
+        
+        # Validate it's a real ticker
+        if ticker and ticker != "NONE" and len(ticker) <= 5:
+            try:
+                stock = yf.Ticker(ticker)
+                info = stock.info
+                if info and info.get('symbol'):
+                    return ticker
+            except Exception as e:
+                pass
+        
+        return None
+    except Exception as e:
+        traceback.print_exc()
+        return None
 
 # ============= FINANCIAL TOOLS =============
 @tool
@@ -549,6 +607,9 @@ async def analyze_stock(request: QueryRequest):
         
         enhanced_message = message
         cached_ticker = None
+
+        if not ticker and not has_cached_ticker:
+            ticker = extract_ticker_with_ai(message, request.api_key)
         
         # If we detected a valid ticker, call tools directly and ask agent to analyze
         if ticker:
