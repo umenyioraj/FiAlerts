@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
 import './App.css';
+import { Component as GradientBg } from './components/ui/bg-gradient';
+import AIAssistant from './components/ui/ai-assistant';
 
 // Use Render backend URL in production, localhost in development
 const API_URL = process.env.REACT_APP_API_URL || 
@@ -12,21 +14,9 @@ function App() {
   const [apiKey, setApiKey] = useState('');
   const [tempApiKey, setTempApiKey] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [message, setMessage] = useState('');
-  const [conversation, setConversation] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [cachedTicker, setCachedTicker] = useState(null);
-  const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [conversation]);
 
   const handleApiKeySubmit = (e) => {
     e.preventDefault();
@@ -41,69 +31,50 @@ function App() {
     setError('');
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!message.trim()) {
-      setError('Please enter a question');
-      return;
-    }
-
-    const userMessage = message.trim();
-    
-    // Add user message to conversation
-    setConversation(prev => [...prev, { role: 'user', content: userMessage }]);
-    
-    setLoading(true);
-    setError('');
-    setMessage('');
-
+  const handleSendMessage = async (message) => {
     try {
       const result = await axios.post(`${API_URL}/analyze`, {
-        message: userMessage,
+        message: message,
         api_key: apiKey,
         session_id: sessionId
       });
 
       console.log('Analysis result:', result.data);
-      console.log('Response:', result.data.response);
-      console.log('Session ID:', result.data.session_id);
-      console.log('Cached ticker:', result.data.cached_ticker);
-      
-      // Add AI response to conversation
-      setConversation(prev => [...prev, { 
-        role: 'assistant', 
-        content: result.data.response,
-        agents: result.data.agents_used 
-      }]);
       
       setSessionId(result.data.session_id);
       setCachedTicker(result.data.cached_ticker);
       
+      return result.data.response;
     } catch (err) {
-      setError(err.response?.data?.detail || 'An error occurred while analyzing. Please try again.');
       console.error('Error:', err);
-    } finally {
-      setLoading(false);
+      throw new Error(err.response?.data?.detail || 'An error occurred while analyzing. Please try again.');
     }
   };
 
-  const exampleQuestions = [
-    "Should I buy TSLA stock?",
-    "Analyze AAPL stock",
-    "What are the key financial metrics for MSFT?",
-    "What is the EMA for AMZN?"
+  const handleClearSession = () => {
+    setSessionId(null);
+    setCachedTicker(null);
+  };
 
-  ];
-
-  const handleExampleClick = (question) => {
-    setMessage(question);
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setTempApiKey('');
+    setApiKey('');
+    setError('');
+    setSessionId(null);
+    setCachedTicker(null);
   };
 
   // API Key Entry Page
   if (!isAuthenticated) {
     return (
       <div className="App">
+        <GradientBg 
+          gradientFrom="#ffffff"
+          gradientTo="#e0e7ff"
+          gradientPosition="50% 0%"
+          gradientStop="40%"
+        />
         <div className="auth-container">
           <div className="auth-box">
             <div className="auth-header">
@@ -150,36 +121,27 @@ function App() {
   // Main Chat Page
   return (
     <div className="App">
+      <GradientBg 
+        gradientFrom="#ffffff"
+        gradientTo="#c7d2fe"
+        gradientPosition="50% 0%"
+        gradientStop="40%"
+      />
 
       <header className="App-header">
-        <h1> FiAlerts</h1>
+        <h1>FiAlerts</h1>
         <p>AI-Powered Financial Analysis Agent</p>
         <div className="header-actions">
           <button 
             className="logout-button"
-            onClick={() => {
-              setIsAuthenticated(false);
-              setTempApiKey('');
-              setApiKey('');
-              setMessage('');
-              setConversation([]);
-              setError('');
-              setSessionId(null);
-              setCachedTicker(null);
-            }}
+            onClick={handleLogout}
           >
             Change API Key
           </button>
           {cachedTicker && (
             <button 
               className="clear-button"
-              onClick={() => {
-                setSessionId(null);
-                setCachedTicker(null);
-                setConversation([]);
-                setMessage('');
-                setError('');
-              }}
+              onClick={handleClearSession}
               title="Start fresh conversation"
             >
               Clear Session ({cachedTicker})
@@ -188,82 +150,11 @@ function App() {
         </div>
       </header>
 
-      <div className="container">
-        {/* Chat Messages Area */}
-        <div className="chat-container">
-          {conversation.length === 0 && !loading && (
-            <div className="welcome-message">
-              <h2>Ask me anything about stocks, financial analysis, or market trends!</h2>
-              <div className="examples">
-                <p className="examples-title">Try these examples:</p>
-                <div className="example-buttons">
-                  {exampleQuestions.map((question, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleExampleClick(question)}
-                      className="example-button"
-                      type="button"
-                    >
-                      {question}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {conversation.map((msg, index) => (
-            <div key={index} className={`message ${msg.role}`}>
-              <div className="message-content">
-               
-                <div className="message-text">
-                  {msg.content.split('\n').map((line, i) => (
-                    <p key={i} dangerouslySetInnerHTML={{ 
-                      __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') || '&nbsp;' 
-                    }} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {loading && (
-            <div className="loading-text">
-              AI agents are analyzing your request...
-            </div>
-          )}
-
-          {error && (
-            <div className="error-box">
-              <strong>Error:</strong> {error}
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input Area (Fixed at Bottom) */}
-        <div className="input-container">
-          <form onSubmit={handleSubmit} className="chat-input-form">
-            <textarea
-              rows="2"
-              placeholder="Ask a question about stocks..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e);
-                }
-              }}
-              className="chat-input"
-              disabled={loading}
-            />
-            <button type="submit" disabled={loading || !message.trim()} className={`send-button ${loading ? 'loading' : ''}`}>
-              <span className="arrow"></span>
-            </button>
-          </form>
-        </div>
+      <div className="container-modern">
+        <AIAssistant 
+          apiKey={apiKey}
+          onSendMessage={handleSendMessage}
+        />
       </div>
 
       <footer className="footer">

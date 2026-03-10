@@ -2,53 +2,17 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #0a0a0f;
   position: relative;
   overflow: hidden;
 }
 
-/* Aurora Background Effect */
-.App::before {
-  content: '';
-  position: fixed;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: 
-    radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(138, 43, 226, 0.3) 0%, transparent 50%),
-    radial-gradient(circle at 40% 20%, rgba(0, 212, 255, 0.2) 0%, transparent 50%),
-    radial-gradient(circle at 60% 70%, rgba(255, 0, 128, 0.2) 0%, transparent 50%);
-  animation: aurora 20s ease-in-out infinite;
-  z-index: 0;
-  pointer-events: none;
-}
-
-@keyframes aurora {
-  0%, 100% {
-    transform: translate(0, 0) rotate(0deg);
-    opacity: 0.8;
-  }
-  33% {
-    transform: translate(30px, -50px) rotate(120deg);
-    opacity: 0.9;
-  }
-  66% {
-    transform: translate(-20px, 20px) rotate(240deg);
-    opacity: 0.7;
-  }
-}
+/* Removed old aurora background - now using gradient component */
 
 .App-header {
-  background: 
-    radial-gradient(circle at 20% 50%, rgba(120, 119, 198, 0.3) 0%, transparent 30%),
-    radial-gradient(circle at 80% 80%, rgba(138, 43, 226, 0.3) 0%, transparent 30%),
-    radial-gradient(circle at 40% 20%, rgba(0, 212, 255, 0.2) 0%, transparent 30%),
-    radial-gradient(circle at 60% 70%, rgba(255, 0, 128, 0.2) 0%, transparent 30%);
+  background: rgba(255, 255, 255, 0.6);
   padding: 3rem 2rem;
   text-align: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(79, 70, 229, 0.1);
   backdrop-filter: blur(10px);
   position: relative;
   z-index: 1;
@@ -56,18 +20,18 @@
 
 .logout-button {
   padding: 0.75rem 1.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(79, 70, 229, 0.05);
+  border: 1px solid rgba(79, 70, 229, 0.2);
   border-radius: 24px;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(79, 70, 229, 0.9);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .logout-button:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  background: rgba(79, 70, 229, 0.1);
+  color: rgba(79, 70, 229, 1);
   transform: translateY(-2px);
 }
 
@@ -110,7 +74,7 @@
 }
 
 .App-header p {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(55, 65, 81, 0.7);
   font-size: 1.2rem;
   font-weight: 300;
 }
@@ -128,6 +92,19 @@
   flex-direction: column;
 }
 
+.container-modern {
+  flex: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Chat Container - Scrollable Messages Area */
 .chat-container {
   flex: 1;
@@ -143,7 +120,7 @@
 }
 
 .chat-container::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(79, 70, 229, 0.05);
   border-radius: 10px;
 }
 
@@ -160,7 +137,7 @@
 .welcome-message {
   text-align: center;
   padding: 3rem 1.5rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(55, 65, 81, 0.9);
   max-width: 700px;
   margin: auto;
 }
@@ -176,7 +153,7 @@
 
 .welcome-message > p {
   font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(55, 65, 81, 0.6);
   margin-bottom: 2rem;
 }
 
@@ -221,17 +198,18 @@
 }
 
 .message.assistant .message-content {
-  background: rgba(15, 15, 25, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(79, 70, 229, 0.2);
   backdrop-filter: blur(10px);
   border-bottom-left-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.1);
+  color: #1f2937;
 }
 
 .message-text p {
   margin: 0.5rem 0;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.9);
+  color: inherit;
 }
 
 .message.user .message-text p {
@@ -254,12 +232,12 @@
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(79, 70, 229, 0.15);
 }
 
 .message .agent-tag {
-  background: rgba(102, 126, 234, 0.2);
-  color: rgba(102, 126, 234, 1);
+  background: rgba(102, 126, 234, 0.15);
+  color: rgba(79, 70, 229, 0.9);
   padding: 0.25rem 0.75rem;
   border-radius: 12px;
   font-size: 0.8rem;
@@ -270,7 +248,7 @@
 /* Loading Message */
 .loading-text {
   text-align: center;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(79, 70, 229, 0.7);
   font-size: 0.95rem;
   padding: 2rem 1rem;
   animation: pulse 2s ease-in-out infinite;
@@ -288,8 +266,8 @@
 /* Input Container - Fixed at Bottom */
 .input-container {
   padding: 1.5rem;
-  background: rgba(10, 10, 15, 0.95);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid rgba(79, 70, 229, 0.1);
   backdrop-filter: blur(10px);
   position: sticky;
   bottom: 0;
@@ -306,11 +284,11 @@
 
 .chat-input {
   flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(79, 70, 229, 0.05);
+  border: 1px solid rgba(79, 70, 229, 0.2);
   border-radius: 20px;
   padding: 1rem 1.25rem;
-  color: white;
+  color: #1f2937;
   font-size: 0.95rem;
   font-family: inherit;
   resize: none;
@@ -322,7 +300,7 @@
 .chat-input:focus {
   outline: none;
   border-color: rgba(102, 126, 234, 0.5);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(79, 70, 229, 0.08);
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -332,7 +310,7 @@
 }
 
 .chat-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(79, 70, 229, 0.4);
 }
 
 .send-button {
@@ -394,13 +372,13 @@
 
 /* Keep old styles for backwards compatibility */
 .input-section {
-  background: rgba(15, 15, 25, 0.8);
+  background: rgba(255, 255, 255, 0.9);
   padding: 2.5rem;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 70, 229, 0.2);
   margin-bottom: 2rem;
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.15);
 }
 
 .form-group {
@@ -410,7 +388,7 @@
 .form-group label {
   display: block;
   margin-bottom: 0.75rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(55, 65, 81, 0.9);
   font-weight: 500;
   font-size: 0.95rem;
   letter-spacing: 0.3px;
@@ -419,23 +397,23 @@
 .input-field {
   width: 100%;
   padding: 1rem 1.25rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(79, 70, 229, 0.05);
+  border: 1px solid rgba(79, 70, 229, 0.2);
   border-radius: 12px;
   font-size: 1rem;
-  color: #ffffff;
+  color: #1f2937;
   transition: all 0.3s ease;
 }
 
 .input-field:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(79, 70, 229, 0.08);
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .input-field::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(79, 70, 229, 0.4);
 }
 
 .textarea {
@@ -447,7 +425,7 @@
 .help-text {
   display: block;
   margin-top: 0.5rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(79, 70, 229, 0.6);
   font-size: 0.85rem;
 }
 
@@ -490,11 +468,11 @@
 .examples {
   margin-top: 2.5rem;
   padding-top: 2.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(79, 70, 229, 0.1);
 }
 
 .examples-title {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(55, 65, 81, 0.7);
   font-weight: 500;
   margin-bottom: 1.25rem;
   font-size: 0.9rem;
@@ -510,13 +488,13 @@
 
 .example-button {
   padding: 0.75rem 1.25rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(79, 70, 229, 0.05);
+  border: 1px solid rgba(79, 70, 229, 0.2);
   border-radius: 24px;
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.3s ease;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(79, 70, 229, 0.9);
 }
 
 .example-button:hover {
@@ -528,9 +506,9 @@
 }
 
 .error-box {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #dc2626;
   padding: 1.25rem;
   border-radius: 12px;
   margin: 1rem;
@@ -547,7 +525,7 @@
 }
 
 .loading-box p {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(79, 70, 229, 0.7);
   font-size: 0.95rem;
   margin: 0;
 }
@@ -567,12 +545,12 @@
 }
 
 .response-section {
-  background: rgba(15, 15, 25, 0.8);
+  background: rgba(255, 255, 255, 0.9);
   padding: 2.5rem;
   border-radius: 24px;
   border: 1px solid rgba(102, 126, 234, 0.3);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 40px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.15), 0 0 40px rgba(102, 126, 234, 0.1);
   margin-top: 2rem;
   animation: slideIn 0.3s ease-out;
 }
@@ -595,11 +573,11 @@
   gap: 0.75rem;
   margin-bottom: 2rem;
   padding-bottom: 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(79, 70, 229, 0.1);
 }
 
 .agents-badge strong {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(79, 70, 229, 0.7);
   margin-right: 0.5rem;
   font-size: 0.9rem;
   text-transform: uppercase;
@@ -617,7 +595,7 @@
 }
 
 .response-box h3 {
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(31, 41, 55, 0.95);
   margin-bottom: 1.5rem;
   font-size: 1.5rem;
   font-weight: 600;
@@ -625,7 +603,7 @@
 }
 
 .response-content {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(55, 65, 81, 0.9);
   line-height: 1.9;
   font-size: 1rem;
 }
@@ -639,12 +617,12 @@
 }
 
 .footer {
-  background: rgba(15, 15, 25, 0.95);
+  background: rgba(255, 255, 255, 0.95);
   padding: 2rem;
   text-align: center;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(79, 70, 229, 0.5);
   margin-top: 3rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(79, 70, 229, 0.1);
   font-size: 0.9rem;
 }
 
@@ -662,12 +640,12 @@
 .auth-box {
   max-width: 500px;
   width: 100%;
-  background: rgba(15, 15, 25, 0.8);
+  background: rgba(255, 255, 255, 0.9);
   padding: 3rem;
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(79, 70, 229, 0.2);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 32px rgba(79, 70, 229, 0.15);
 }
 
 .auth-header {
@@ -687,7 +665,7 @@
 }
 
 .auth-header p {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(55, 65, 81, 0.7);
   font-size: 1.1rem;
   font-weight: 300;
 }
