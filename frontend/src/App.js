@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import './App.css';
 import { Component as GradientBg } from './components/ui/bg-gradient';
@@ -10,6 +10,13 @@ const API_URL = process.env.REACT_APP_API_URL ||
     ? 'https://fialerts.onrender.com'
     : 'http://localhost:8000');
 
+const TRACKR_API_URL = process.env.REACT_APP_TRACKR_API_URL || 'http://localhost:8080/api';
+
+const ALLOWED_PARENT_ORIGINS = new Set([
+  'http://localhost:5173',
+  'https://trackr-aio.netlify.app'
+]);
+
 function App() {
   const [apiKey, setApiKey] = useState('');
   const [tempApiKey, setTempApiKey] = useState('');
@@ -17,8 +24,56 @@ function App() {
   const [error, setError] = useState('');
   const [sessionId, setSessionId] = useState(null);
   const [cachedTicker, setCachedTicker] = useState(null);
+  const [trackrToken, setTrackrToken] = useState(null);
 
-  const handleApiKeySubmit = (e) => {
+  useEffect(() => {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'FIALERTS_READY' }, '*');
+      }
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  useEffect(() => {
+    const onMessage = (event) => {
+      if (!ALLOWED_PARENT_ORIGINS.has(event.origin)) return;
+      if (!event.data || event.data.type !== 'TRACKUI_AUTH') return;
+      if (!event.data.token) return;
+
+      setTrackrToken(event.data.token);
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  useEffect(() => {
+    const loadSavedKey = async () => {
+      if (!trackrToken) return;
+      try {
+        const res = await axios.get(`${TRACKR_API_URL}/user/google-api-key`, {
+          headers: { Authorization: `Bearer ${trackrToken}` }
+        });
+        if (res?.data?.googleApiKey) {
+          setApiKey(res.data.googleApiKey);
+          setIsAuthenticated(true);
+          setError('');
+        }
+      } catch (err) {
+        if (err?.response?.status === 404) {
+          // Key not saved yet
+          return;
+        }
+        console.error('Failed to load saved API key:', err);
+      }
+    };
+
+    loadSavedKey();
+  }, [trackrToken]);
+
+  const handleApiKeySubmit = async (e) => {
     e.preventDefault();
     
     if (!tempApiKey.trim()) {
@@ -26,9 +81,22 @@ function App() {
       return;
     }
     
-    setApiKey(tempApiKey);
-    setIsAuthenticated(true);
-    setError('');
+    try {
+      if (trackrToken) {
+        await axios.put(
+          `${TRACKR_API_URL}/user/google-api-key`,
+          { googleApiKey: tempApiKey },
+          { headers: { Authorization: `Bearer ${trackrToken}` } }
+        );
+      }
+
+      setApiKey(tempApiKey);
+      setIsAuthenticated(true);
+      setError('');
+    } catch (err) {
+      console.error('Failed to save API key:', err);
+      setError('Could not save your API key. Please try again.');
+    }
   };
 
   const handleSendMessage = async (message) => {
@@ -56,7 +124,17 @@ function App() {
     setCachedTicker(null);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (trackrToken) {
+        await axios.delete(`${TRACKR_API_URL}/user/google-api-key`, {
+          headers: { Authorization: `Bearer ${trackrToken}` }
+        });
+      }
+    } catch (err) {
+      console.error('Failed to delete saved API key:', err);
+    }
+
     setIsAuthenticated(false);
     setTempApiKey('');
     setApiKey('');
@@ -100,6 +178,11 @@ function App() {
                     Google AI Studio
                   </a>
                 </small>
+                {trackrToken && (
+                  <small className="help-text">
+                    Your key will be saved to your Track-UI account.
+                  </small>
+                )}
               </div>
 
               {error && (
