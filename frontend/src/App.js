@@ -22,6 +22,13 @@ const ALLOWED_PARENT_ORIGINS = new Set([
   'https://trackr-aio.netlify.app'
 ]);
 
+const isAllowedParentOrigin = (origin) => {
+  if (!origin) return false;
+  if (origin === 'null') return true;
+  if (ALLOWED_PARENT_ORIGINS.has(origin)) return true;
+  return /^https:\/\/.*\.netlify\.app$/i.test(origin);
+};
+
 function App() {
   const [apiKey, setApiKey] = useState('');
   const [tempApiKey, setTempApiKey] = useState('');
@@ -31,7 +38,19 @@ function App() {
   const [cachedTicker, setCachedTicker] = useState(null);
   const [trackrToken, setTrackrToken] = useState(null);
 
+  const requestTrackUiAuth = () => {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'REQUEST_TRACKUI_AUTH' }, '*');
+        window.parent.postMessage({ type: 'REQUEST_TRACK_UI_CONTEXT' }, '*');
+      }
+    } catch {
+      // no-op
+    }
+  };
+
   useEffect(() => {
+    requestTrackUiAuth();
     try {
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({ type: 'FIALERTS_READY' }, '*');
@@ -42,8 +61,26 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (trackrToken) return;
+    if (!(window.parent && window.parent !== window)) return;
+
+    const retryId = window.setInterval(() => {
+      requestTrackUiAuth();
+    }, 1000);
+
+    const stopId = window.setTimeout(() => {
+      window.clearInterval(retryId);
+    }, 10000);
+
+    return () => {
+      window.clearInterval(retryId);
+      window.clearTimeout(stopId);
+    };
+  }, [trackrToken]);
+
+  useEffect(() => {
     const onMessage = (event) => {
-      if (!ALLOWED_PARENT_ORIGINS.has(event.origin)) return;
+      if (!isAllowedParentOrigin(event.origin)) return;
       if (!event.data || event.data.type !== 'TRACKUI_AUTH') return;
       if (!event.data.token) return;
 
