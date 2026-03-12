@@ -10,7 +10,12 @@ const API_URL = process.env.REACT_APP_API_URL ||
     ? 'https://fialerts.onrender.com'
     : 'http://localhost:8000');
 
-const TRACKR_API_URL = process.env.REACT_APP_TRACKR_API_URL || 'http://localhost:8080/api';
+const TRACKR_API_URL = (
+  process.env.REACT_APP_TRACKR_API_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://trackr-backend-lyot.onrender.com/api'
+    : 'http://localhost:8080/api')
+).trim();
 
 const ALLOWED_PARENT_ORIGINS = new Set([
   'http://localhost:5173',
