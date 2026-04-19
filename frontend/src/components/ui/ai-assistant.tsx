@@ -1,21 +1,50 @@
 import React, { useState } from "react";
-import { Send, Sparkles, X, Loader2 } from "lucide-react";
+import { Send, Sparkles, X, Loader2, Bell, Check } from "lucide-react";
 
 interface Message {
   text: string;
   isUser: boolean;
+  monitorSuggestion?: MonitorSuggestion | null;
+}
+
+interface MonitorSuggestion {
+  ticker: string;
+  target_price: number;
+  direction: "above" | "below";
+}
+
+interface MonitorDraft {
+  ticker: string;
+  target_price: string;
+  direction: "above" | "below";
+  user_email: string;
 }
 
 interface AIAssistantProps {
   apiKey?: string;
-  onSendMessage?: (message: string) => Promise<string>;
+  onSendMessage?: (message: string) => Promise<{ response: string; monitor_suggestion?: MonitorSuggestion | null }>;
+  onCreateMonitor?: (monitor: { ticker: string; target_price: number; direction: string; user_email?: string }) => Promise<void>;
+  openAlert?: boolean;
+  onCloseAlert?: () => void;
+  userEmail?: string;
 }
 
-const AIAssistant: React.FC<AIAssistantProps> = ({ apiKey, onSendMessage }) => {
+const AIAssistant: React.FC<AIAssistantProps> = ({ apiKey, onSendMessage, onCreateMonitor, openAlert, onCloseAlert, userEmail }) => {
   const [input, setInput] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [isFocused, setIsFocused] = useState<boolean>(false);
+  const [monitorDraft, setMonitorDraft] = useState<MonitorDraft | null>(null);
+  const [monitorSubmitting, setMonitorSubmitting] = useState<boolean>(false);
+  const [monitorSuccess, setMonitorSuccess] = useState<boolean>(false);
+
+  // Open blank alert popup when parent sets openAlert=true
+  React.useEffect(() => {
+    if (openAlert) {
+      setMonitorDraft({ ticker: "", target_price: "", direction: "above", user_email: userEmail || "" });
+      setMonitorSuccess(false);
+    }
+  }, [openAlert, userEmail]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -29,10 +58,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKey, onSendMessage }) => {
     
     try {
       if (onSendMessage) {
-        const response = await onSendMessage(userMessage);
-        setMessages((prev) => [...prev, { text: response, isUser: false }]);
+        const result = await onSendMessage(userMessage);
+        setMessages((prev) => [...prev, {
+          text: result.response,
+          isUser: false,
+          monitorSuggestion: result.monitor_suggestion || null,
+        }]);
       } else {
-        // Fallback simulation if no handler provided
         setTimeout(() => {
           const response = "Hi there! I'm your AI assistant. How can I help you today?";
           setMessages((prev) => [...prev, { text: response, isUser: false }]);
@@ -47,6 +79,37 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKey, onSendMessage }) => {
       ]);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const closeMonitorModal = () => {
+    setMonitorDraft(null);
+    onCloseAlert?.();
+  };
+
+  const handleMonitorSubmit = async () => {
+    if (!monitorDraft || !onCreateMonitor) return;
+    const price = parseFloat(monitorDraft.target_price);
+    if (isNaN(price) || price <= 0) return;
+
+    setMonitorSubmitting(true);
+    try {
+      await onCreateMonitor({
+        ticker: monitorDraft.ticker.toUpperCase(),
+        target_price: price,
+        direction: monitorDraft.direction,
+        user_email: monitorDraft.user_email.trim() || undefined,
+      });
+      setMonitorSuccess(true);
+      setTimeout(() => {
+        setMonitorDraft(null);
+        setMonitorSuccess(false);
+        onCloseAlert?.();
+      }, 1500);
+    } catch {
+      // keep modal open so user can retry
+    } finally {
+      setMonitorSubmitting(false);
     }
   };
 
@@ -98,6 +161,23 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKey, onSendMessage }) => {
                   } animate-fade-in`}
                 >
                   <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  {!msg.isUser && msg.monitorSuggestion && (
+                    <button
+                      onClick={() => {
+                        setMonitorDraft({
+                          ticker: msg.monitorSuggestion!.ticker,
+                          target_price: String(msg.monitorSuggestion!.target_price),
+                          direction: msg.monitorSuggestion!.direction,
+                          user_email: userEmail || "",
+                        });
+                        setMonitorSuccess(false);
+                      }}
+                      className="mt-3 inline-flex items-center space-x-1 text-indigo-600 hover:text-indigo-800 text-sm font-medium underline underline-offset-2 cursor-pointer"
+                    >
+                      <Bell className="h-3.5 w-3.5" />
+                      <span>Create a price alert for {msg.monitorSuggestion.ticker}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -149,6 +229,99 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKey, onSendMessage }) => {
           </button>
         </div>
       </form>
+
+      {/* Monitor Suggestion Popup */}
+      {monitorDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-indigo-200 w-full max-w-md mx-4 animate-fade-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-indigo-100">
+              <div className="flex items-center space-x-2">
+                <Bell className="h-5 w-5 text-indigo-600" />
+                <h3 className="text-lg font-semibold text-slate-800">Create Price Alert</h3>
+              </div>
+              <button onClick={closeMonitorModal} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {monitorSuccess ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-2">
+                <Check className="h-12 w-12 text-green-500" />
+                <p className="text-green-700 font-medium">Alert created!</p>
+              </div>
+            ) : (
+              <>
+                <div className="px-6 py-4 space-y-4">
+                  {/* Ticker */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Ticker</label>
+                    <input
+                      type="text"
+                      value={monitorDraft.ticker}
+                      onChange={(e) => setMonitorDraft({ ...monitorDraft, ticker: e.target.value.toUpperCase() })}
+                      className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  {/* Target Price */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Target Price ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={monitorDraft.target_price}
+                      onChange={(e) => setMonitorDraft({ ...monitorDraft, target_price: e.target.value })}
+                      className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  {/* Direction */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Alert when price goes</label>
+                    <select
+                      value={monitorDraft.direction}
+                      onChange={(e) => setMonitorDraft({ ...monitorDraft, direction: e.target.value as "above" | "below" })}
+                      className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="above">Above target</option>
+                      <option value="below">Below target</option>
+                    </select>
+                  </div>
+                  {/* Email (optional) */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email for notification (optional)</label>
+                    <input
+                      type="email"
+                      value={monitorDraft.user_email}
+                      onChange={(e) => setMonitorDraft({ ...monitorDraft, user_email: e.target.value })}
+                      placeholder="you@example.com"
+                      className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end space-x-3 px-6 pb-5 pt-2">
+                  <button
+                    onClick={closeMonitorModal}
+                    className="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleMonitorSubmit}
+                    disabled={monitorSubmitting || !monitorDraft.ticker || !monitorDraft.target_price}
+                    className="px-4 py-2 text-sm rounded-lg text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {monitorSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                    <span>{monitorSubmitting ? "Creating..." : "Create Alert"}</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

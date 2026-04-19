@@ -1,7 +1,8 @@
 import traceback
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import os
 from typing import Annotated, Literal, Optional
@@ -9,6 +10,11 @@ from typing_extensions import TypedDict
 import pandas as pd
 import uuid
 from datetime import datetime, timedelta
+import hashlib
+import hmac
+import json
+import base64
+import secrets
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -17,8 +23,83 @@ from langgraph.prebuilt import tools_condition, ToolNode
 from langchain_core.tools import tool
 import yfinance as yf
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import resend
+import bcrypt
+import psycopg2
+import psycopg2.extras
+from monitor.monitor import add_to_monitoring_queue, start_monitoring, get_active_alerts, cancel_alert, _get_conn
+from enviornment.enviornment import NEON_URL, NEON_USERNAME, NEON_PASSWORD
 analyzer = SentimentIntensityAnalyzer()
 
+# --- JWT helpers (standalone, no external JWT lib needed) ---
+JWT_SECRET = os.environ.get("FIALERTS_JWT_SECRET", secrets.token_hex(32))
+JWT_EXPIRY_HOURS = 24
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+def _b64url_decode(s: str) -> bytes:
+    s += "=" * ((4 - len(s) % 4) % 4)
+    return base64.urlsafe_b64decode(s)
+
+def _create_jwt(email: str) -> str:
+    header = _b64url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    payload = _b64url_encode(json.dumps({
+        "sub": email,
+        "iat": int(datetime.utcnow().timestamp()),
+        "exp": int((datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS)).timestamp()),
+    }).encode())
+    signing_input = f"{header}.{payload}".encode()
+    sig = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
+    return f"{header}.{payload}.{_b64url_encode(sig)}"
+
+def _verify_jwt(token: str) -> dict | None:
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        signing_input = f"{parts[0]}.{parts[1]}".encode()
+        expected_sig = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
+        actual_sig = _b64url_decode(parts[2])
+        if not hmac.compare_digest(expected_sig, actual_sig):
+            return None
+        payload = json.loads(_b64url_decode(parts[1]))
+        if payload.get("exp", 0) < datetime.utcnow().timestamp():
+            return None
+        return payload
+    except Exception:
+        return None
+
+security = HTTPBearer()
+
+def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    """Dependency: returns email from valid JWT or raises 401."""
+    payload = _verify_jwt(creds.credentials)
+    if not payload or "sub" not in payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return payload["sub"]
+
+# --- DB init: create auth tables on startup ---
+def _init_auth_tables():
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS fi_users (
+                    id SERIAL PRIMARY KEY,
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    first_name VARCHAR(100),
+                    last_name VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE TABLE IF NOT EXISTS fi_api_keys (
+                    id SERIAL PRIMARY KEY,
+                    user_email VARCHAR(255) UNIQUE NOT NULL REFERENCES fi_users(email),
+                    api_key TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+        conn.commit()
 
 app = FastAPI(title="FiAlerts API - Simple")
 
@@ -29,6 +110,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Session storage for conversation memory and cached stock data
 # Format: {session_id: {"ticker": str, "data": dict, "timestamp": datetime, "history": list}}
@@ -56,6 +138,7 @@ class QueryResponse(BaseModel):
     agents_used: list[str]
     session_id: str
     cached_ticker: Optional[str] = None
+    monitor_suggestion: Optional[dict] = None
 
 # Copy of the function from main_simple.py
 def extract_ticker_with_ai(message: str, api_key: str) -> Optional[str]:
@@ -394,6 +477,7 @@ def screen_stocks_for_growth(tickers_str: str, max_stocks: int = 1) -> dict:
     except Exception as e:
         return {"error": f"Screening error: {str(e)}"}
 
+
 # ============= SINGLE AGENT SYSTEM =============
 class AgentState(TypedDict):
     messages: list
@@ -496,6 +580,18 @@ If user provides their purchase price or dollar cost average (DCA):
 - Incorporate that into your recommendation
 - Compare current price to their entry point
 - Suggest specific strategies only if asked
+
+IMPORTANT — Monitor Suggestion:
+After ANY stock analysis that includes a recommendation, you MUST end your response with a monitor suggestion block.
+This block lets the user set a price alert. Choose a sensible target price based on your analysis (e.g. a support level, resistance level, or price target).
+The direction should be "above" if the target is higher than current price, or "below" if lower.
+Format it EXACTLY like this on its own lines at the very end of your response:
+
+[MONITOR_SUGGESTION]
+{"ticker": "AAPL", "target_price": 195.50, "direction": "above"}
+[/MONITOR_SUGGESTION]
+
+Do NOT include this block for follow-up questions, screening requests, or non-analysis queries.
 
 Always be direct and data-driven."""
 
@@ -734,15 +830,136 @@ Answer ONLY the user's specific question. Be concise and direct. Reference relev
         if not final_response or final_response.strip() == "":
             final_response = "Analysis completed but no response was generated. Please try again with a different question."
         
+        # Parse monitor suggestion from AI response
+        monitor_suggestion = None
+        if "[MONITOR_SUGGESTION]" in final_response and "[/MONITOR_SUGGESTION]" in final_response:
+            import json
+            try:
+                start = final_response.index("[MONITOR_SUGGESTION]") + len("[MONITOR_SUGGESTION]")
+                end = final_response.index("[/MONITOR_SUGGESTION]")
+                suggestion_json = final_response[start:end].strip()
+                monitor_suggestion = json.loads(suggestion_json)
+                # Remove the suggestion block from the displayed response
+                final_response = final_response[:final_response.index("[MONITOR_SUGGESTION]")].rstrip()
+            except (json.JSONDecodeError, ValueError):
+                pass
+        
         return QueryResponse(
             response=final_response,
             agents_used=["Unified Agent (Simple Mode)"],
             session_id=session_id,
-            cached_ticker=cached_ticker
+            cached_ticker=cached_ticker,
+            monitor_suggestion=monitor_suggestion
         )
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============= MONITOR ENDPOINTS =============
+class MonitorRequest(BaseModel):
+    ticker: str
+    target_price: float
+    direction: Literal["above", "below"]
+    user_email: Optional[str] = None
+
+@app.on_event("startup")
+def on_startup():
+    _init_auth_tables()
+    start_monitoring(interval=60)
+
+# ============= AUTH ENDPOINTS =============
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    firstName: Optional[str] = None
+    lastName: Optional[str] = None
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/register")
+async def register(req: RegisterRequest):
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    pw_hash = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO fi_users (email, password_hash, first_name, last_name) VALUES (%s, %s, %s, %s)",
+                    (req.email.lower().strip(), pw_hash, req.firstName, req.lastName)
+                )
+            conn.commit()
+    except psycopg2.errors.UniqueViolation:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    token = _create_jwt(req.email.lower().strip())
+    return {"token": token, "email": req.email.lower().strip()}
+
+@app.post("/auth/login")
+async def login(req: LoginRequest):
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT email, password_hash FROM fi_users WHERE email=%s", (req.email.lower().strip(),))
+            user = cur.fetchone()
+    if not user or not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = _create_jwt(user["email"])
+    return {"token": token, "email": user["email"]}
+
+# ============= API KEY ENDPOINTS =============
+@app.get("/user/api-key")
+async def get_api_key(email: str = Depends(get_current_user)):
+    with _get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT api_key FROM fi_api_keys WHERE user_email=%s", (email,))
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="No API key saved")
+    return {"apiKey": row["api_key"]}
+
+@app.put("/user/api-key")
+async def save_api_key(body: dict, email: str = Depends(get_current_user)):
+    api_key = body.get("apiKey", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="apiKey is required")
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO fi_api_keys (user_email, api_key, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (user_email) DO UPDATE SET api_key = EXCLUDED.api_key, updated_at = NOW()
+            """, (email, api_key))
+        conn.commit()
+    return {"status": "saved"}
+
+@app.delete("/user/api-key")
+async def delete_api_key(email: str = Depends(get_current_user)):
+    with _get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM fi_api_keys WHERE user_email=%s", (email,))
+        conn.commit()
+    return {"status": "deleted"}
+
+@app.post("/monitor")
+async def add_monitor(req: MonitorRequest):
+    """Add a stock price alert to the monitoring queue."""
+    alert = add_to_monitoring_queue(req.ticker, req.target_price, req.direction, req.user_email)
+    return {"status": "added", "alert": alert}
+
+@app.get("/monitor")
+async def get_monitors():
+    """Get all active monitoring alerts."""
+    alerts = get_active_alerts()
+    return {"alerts": alerts, "count": len(alerts)}
+
+@app.delete("/monitor/{alert_id}")
+async def remove_monitor(alert_id: str):
+    """Cancel a monitoring alert."""
+    cancelled = cancel_alert(alert_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Alert not found or already triggered")
+    return {"status": "cancelled", "id": alert_id}
 
 @app.get("/health")
 @app.head("/health")
