@@ -22,14 +22,16 @@ from langgraph.graph import MessagesState, START, StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from langchain_core.tools import tool
 import yfinance as yf
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from transformers import pipeline
 import resend
 import bcrypt
 import psycopg2
 import psycopg2.extras
 from monitor.monitor import add_to_monitoring_queue, start_monitoring, get_active_alerts, cancel_alert, _get_conn
-from enviornment.enviornment import NEON_URL, NEON_USERNAME, NEON_PASSWORD
-analyzer = SentimentIntensityAnalyzer()
+from enviornment.enviornment import NEON_URL, NEON_USERNAME, NEON_PASSWORD, HF_TOKEN
+
+os.environ["HF_TOKEN"] = HF_TOKEN
+sentiment_pipeline = pipeline("text-classification", model="umenyioraj/finbert-financial-sentiment")
 
 # --- JWT helpers (standalone, no external JWT lib needed) ---
 JWT_SECRET = os.environ.get("FIALERTS_JWT_SECRET", secrets.token_hex(32))
@@ -140,7 +142,7 @@ class QueryResponse(BaseModel):
     cached_ticker: Optional[str] = None
     monitor_suggestion: Optional[dict] = None
 
-# Copy of the function from main_simple.py
+# Copy of the function from main.py
 def extract_ticker_with_ai(message: str, api_key: str) -> Optional[str]:
     """Use AI to map the company name to the stock ticker symbol from natural language (1 API call fallback)."""
     try:
@@ -356,8 +358,9 @@ def get_news_sentiment(ticker: str) -> dict:
                 "recent_headlines": []
             }
 
+        score_map = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
         sentiment_score = 0
-        scored_count = 0  # ✅ initialized before loop
+        scored_count = 0
 
         for article in news:
             content = article.get('content', {})
@@ -373,9 +376,11 @@ def get_news_sentiment(ticker: str) -> dict:
             )
             text = f"{title}. {summary}".strip()
             if text:
-                scores = analyzer.polarity_scores(text)
-                if abs(scores['compound']) > 0.05:
-                    sentiment_score += scores['compound']
+                result = sentiment_pipeline(text, truncation=True, max_length=128)[0]
+                label = result["label"]
+                confidence = result["score"]
+                if confidence > 0.6 and label != "neutral":
+                    sentiment_score += score_map[label] * confidence
                     scored_count += 1
 
         avg_score = sentiment_score / scored_count if scored_count else 0
