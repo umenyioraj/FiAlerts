@@ -22,7 +22,6 @@ from langgraph.graph import MessagesState, START, StateGraph, END
 from langgraph.prebuilt import tools_condition, ToolNode
 from langchain_core.tools import tool
 import yfinance as yf
-from transformers import pipeline
 import resend
 import bcrypt
 import psycopg2
@@ -35,8 +34,17 @@ NEON_URL = os.environ.get("NEON_URL")
 NEON_USERNAME = os.environ.get("NEON_USERNAME")
 NEON_PASSWORD = os.environ.get("NEON_PASSWORD")
 HF_TOKEN = os.environ.get("HF_TOKEN")
+HF_SENTIMENT_URL = "https://umenyioraj-finbert-financial-sentiment.hf.space/analyze"
 
-sentiment_pipeline = pipeline("text-classification", model="umenyioraj/finbert-financial-sentiment")
+def _hf_sentiment(text: str) -> list:
+    """Call the self-hosted FinBERT Space API. Returns all [{label, score}] entries."""
+    import requests as _requests
+    resp = _requests.post(HF_SENTIMENT_URL, json={"inputs": text[:512]}, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data, list) and data:
+        return data
+    raise ValueError(f"Unexpected response: {data}")
 
 # --- JWT helpers (standalone, no external JWT lib needed) ---
 JWT_SECRET = os.environ.get("FIALERTS_JWT_SECRET", secrets.token_hex(32))
@@ -363,7 +371,6 @@ def get_news_sentiment(ticker: str) -> dict:
                 "recent_headlines": []
             }
 
-        score_map = {"positive": 1.0, "neutral": 0.0, "negative": -1.0}
         sentiment_score = 0
         scored_count = 0
 
@@ -381,12 +388,16 @@ def get_news_sentiment(ticker: str) -> dict:
             )
             text = f"{title}. {summary}".strip()
             if text:
-                result = sentiment_pipeline(text, truncation=True, max_length=128)[0]
-                label = result["label"]
-                confidence = result["score"]
-                if confidence > 0.6 and label != "neutral":
-                    sentiment_score += score_map[label] * confidence
-                    scored_count += 1
+                try:
+                    results = _hf_sentiment(text)
+                except Exception as e:
+                    print(f"HF sentiment API error: {e}")
+                    continue
+                # Weighted score: positive_prob - negative_prob per article
+                scores = {r["label"]: r["score"] for r in results}
+                article_score = scores.get("positive", 0) - scores.get("negative", 0)
+                sentiment_score += article_score
+                scored_count += 1
 
         avg_score = sentiment_score / scored_count if scored_count else 0
         sentiment = "positive" if avg_score > 0.15 else "negative" if avg_score < -0.15 else "neutral"
