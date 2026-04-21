@@ -1,20 +1,19 @@
-import sys
-from pathlib import Path
-
-# Fix path BEFORE importing sibling packages
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
+import os
 import threading
 import time
 from typing import Literal, Optional
 
+from dotenv import load_dotenv
 import yfinance as yf
 import resend
 import psycopg2
 import psycopg2.extras
-from enviornment.enviornment import RESEND_API_KEY, NEON_URL, NEON_USERNAME, NEON_PASSWORD
+
+load_dotenv()
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+NEON_URL = os.environ.get("NEON_URL")
+NEON_USERNAME = os.environ.get("NEON_USERNAME")
+NEON_PASSWORD = os.environ.get("NEON_PASSWORD")
 
 resend.api_key = RESEND_API_KEY
 

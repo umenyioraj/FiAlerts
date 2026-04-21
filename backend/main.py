@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import os
+from dotenv import load_dotenv
 from typing import Annotated, Literal, Optional
 from typing_extensions import TypedDict
 import pandas as pd
@@ -15,7 +16,6 @@ import hmac
 import json
 import base64
 import secrets
-
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.graph import MessagesState, START, StateGraph, END
@@ -28,9 +28,14 @@ import bcrypt
 import psycopg2
 import psycopg2.extras
 from monitor.monitor import add_to_monitoring_queue, start_monitoring, get_active_alerts, cancel_alert, _get_conn
-from enviornment.enviornment import NEON_URL, NEON_USERNAME, NEON_PASSWORD, HF_TOKEN
+load_dotenv()
 
-os.environ["HF_TOKEN"] = HF_TOKEN
+
+NEON_URL = os.environ.get("NEON_URL")
+NEON_USERNAME = os.environ.get("NEON_USERNAME")
+NEON_PASSWORD = os.environ.get("NEON_PASSWORD")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+
 sentiment_pipeline = pipeline("text-classification", model="umenyioraj/finbert-financial-sentiment")
 
 # --- JWT helpers (standalone, no external JWT lib needed) ---
@@ -347,7 +352,7 @@ def get_news_sentiment(ticker: str) -> dict:
     """Get recent news and sentiment for a stock ticker."""
     try:
         stock = yf.Ticker(ticker.upper())
-        news = stock.news[:10] if stock.news else []
+        news = stock.news[:20] if stock.news else []
 
         if not news:
             return {
