@@ -2,6 +2,11 @@
 
 A multi-agent AI system for comprehensive stock market analysis powered by Google Gemini and yfinance.
 
+
+<img width="2872" height="1920" alt="FiAlerts-Demo2" src="https://github.com/user-attachments/assets/103dde72-7ae5-411b-8da1-87caa9f127c9" />
+
+
+
 ## Features
 
 - **Multi-Agent Architecture**: 4 specialized AI agents work together
