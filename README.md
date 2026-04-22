@@ -1,6 +1,6 @@
 # FiAlerts - AI Financial Analysis Agent
 
-A multi-agent AI system for comprehensive stock market analysis powered by Google Gemini and yfinance.
+A multi-agent AI system for comprehensive stock market analysis powered by Google Gemini and yfinance and a fine-tuned ML Model.
 
 
 <img width="2872" height="1920" alt="FiAlerts-Demo2" src="https://github.com/user-attachments/assets/103dde72-7ae5-411b-8da1-87caa9f127c9" />
@@ -72,6 +72,8 @@ The frontend will open at `http://localhost:3000`
 **Backend:**
 - FastAPI
 - LangChain & LangGraph
+- Scikit-learn
+- Transformers
 - Google Gemini AI
 - yfinance
 - pandas
