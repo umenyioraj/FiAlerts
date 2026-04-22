@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Send, Sparkles, X, Loader2, Bell, Check } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   text: string;
@@ -160,7 +161,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ apiKey, onSendMessage, onCrea
                       : "bg-white text-slate-800 rounded-tl-sm border border-indigo-100"
                   } animate-fade-in`}
                 >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  {msg.isUser ? (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  ) : (
+                    <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-headings:text-slate-800 prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1 prose-strong:text-slate-900 prose-p:my-1.5 prose-ul:my-1 prose-li:my-0.5 prose-h2:text-base">
+                      <ReactMarkdown>{msg.text}</ReactMarkdown>
+                    </div>
+                  )}
                   {!msg.isUser && msg.monitorSuggestion && (
                     <button
                       onClick={() => {

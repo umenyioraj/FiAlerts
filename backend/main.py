@@ -439,66 +439,6 @@ def get_stock_universe(category: str = "large_cap") -> dict:
         "description": f"List of {category} stocks for analysis"
     }
 
-@tool
-def screen_stocks_for_growth(tickers_str: str, max_stocks: int = 1) -> dict:
-    """Screen multiple stocks for long-term growth potential. Pass tickers as comma-separated string. Returns only the top 1 stock by default to save API quota."""
-    try:
-        tickers = [t.strip().upper() for t in tickers_str.split(",")]
-        results = []
-        
-        for ticker in tickers[:10]:  # Limit to 10 stocks to avoid timeout
-            try:
-                stock = yf.Ticker(ticker)
-                info = stock.info
-                
-                # Key growth metrics
-                pe_ratio = info.get("trailingPE")
-                peg_ratio = info.get("pegRatio")
-                revenue_growth = info.get("revenueGrowth")
-                earnings_growth = info.get("earningsGrowth")
-                roe = info.get("returnOnEquity")
-                debt_to_equity = info.get("debtToEquity")
-                profit_margin = info.get("profitMargins")
-                
-                # Growth score calculation (0-100)
-                score = 50
-                if revenue_growth and revenue_growth > 0.15: score += 15
-                if earnings_growth and earnings_growth > 0.15: score += 15
-                if roe and roe > 0.15: score += 10
-                if profit_margin and profit_margin > 0.15: score += 10
-                if pe_ratio and 15 < pe_ratio < 30: score += 10
-                elif pe_ratio and pe_ratio < 15: score += 5
-                elif pe_ratio and pe_ratio > 40: score -= 10
-                if peg_ratio and peg_ratio < 1.5: score += 10
-                elif peg_ratio and peg_ratio > 3: score -= 5
-                if debt_to_equity and debt_to_equity < 50: score += 5
-                elif debt_to_equity and debt_to_equity > 150: score -= 10
-                
-                results.append({
-                    "ticker": ticker,
-                    "company_name": info.get("longName", "N/A"),
-                    "growth_score": max(0, min(100, score)),
-                    "pe_ratio": pe_ratio,
-                    "peg_ratio": peg_ratio,
-                    "revenue_growth": f"{revenue_growth*100:.1f}%" if revenue_growth else "N/A",
-                    "roe": f"{roe*100:.1f}%" if roe else "N/A"
-                })
-            except:
-                continue
-        
-        # Sort by growth score and return only top stocks
-        results.sort(key=lambda x: x.get("growth_score", 0), reverse=True)
-        top_results = results[:max_stocks]
-        
-        return {
-            "screened_stocks": top_results,
-            "top_pick": top_results[0]["ticker"] if top_results else None,
-            "top_tickers": [r["ticker"] for r in top_results]
-        }
-    except Exception as e:
-        return {"error": f"Screening error: {str(e)}"}
-
-
 # ============= SINGLE AGENT SYSTEM =============
 class AgentState(TypedDict):
     messages: list
@@ -510,8 +450,7 @@ all_tools = [
     get_financial_metrics, 
     get_technical_indicators, 
     get_news_sentiment,
-    get_stock_universe,
-    screen_stocks_for_growth
+    get_stock_universe
 ]
 
 # ============= SESSION MANAGEMENT =============
@@ -569,20 +508,29 @@ UNIFIED_AGENT_PROMPT = """You are a Financial Analysis AI Agent specializing in 
 Your role is to analyze financial data and provide actionable investment insights.
 
 Formatting Rules:
-- Use **double asterisks** ONLY for critical numbers and key terms (ticker symbols, recommendations like BUY/HOLD/SELL)
-- Use section headers like "1. Company Overview" without asterisks
-- Write most content in plain text without formatting
-- Be selective - only bold the most important data points
+- Use ## for section headers (e.g. ## 1. Company Overview)
+- Use bold lettering for: the most important numbers(not all numbers), ticker symbols, and BUY/HOLD/SELL recommendations
+- Always leave a blank line between sections and between paragraphs
+- Never write walls of text — break content into short paragraphs with blank lines between them
 
 When you receive financial data for a stock (metrics, technical indicators, sentiment), provide a comprehensive analysis with:
 
-1. **Company Overview**: Summarize the company and current stock price
-2. **Financial Health**: Analyze valuation ratios (P/E, P/B, PEG), profitability margins, debt levels, and growth rates
-3. **Technical Analysis**: Interpret RSI, MACD, moving averages, and trend signals
-4. **Sentiment Analysis**: Summarize news sentiment and recent headlines
-5. **Investment Recommendation**: Clear BUY/HOLD/SELL recommendation with specific reasoning based on the data
+## 1. Company Overview
+Summarize the company and current stock price.
 
-Be specific - reference actual numbers from the data. Avoid generic statements.
+## 2. Financial Health
+Analyze valuation ratios (P/E, P/B, PEG), profitability margins, debt levels, and growth rates.
+
+## 3. Technical Analysis
+Interpret RSI, MACD, moving averages, and trend signals.
+
+## 4. Sentiment Analysis
+Summarize news sentiment and recent headlines.
+
+## 5. Investment Recommendation
+Clear **BUY** / **HOLD** / **SELL** recommendation with specific reasoning based on the data.
+
+Be specific — reference actual numbers from the data. Avoid generic statements.
 
 CRITICAL: If you see "FOLLOW-UP question" in the prompt, DO NOT provide the full 5-section analysis again. 
 Only answer the specific question asked. Be concise and direct.
